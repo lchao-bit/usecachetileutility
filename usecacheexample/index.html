@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <meta charset="utf-8" />
+    <title>Leaflet test</title>
+	<style>
+		#map { height: 800px; }
+	</style>
+	<link rel="stylesheet" href="leaflet.css" />
+	<link rel="stylesheet" href="leaflet.label.css" />
+	<link rel="stylesheet" href="easy-button.css" />
+	<script src="leaflet-src.js"></script>
+	<script src="TileLayer.GeoJSON.js"></script>	
+	<script src="leaflet.label-src.js"></script>
+	<script src="OSMBuildings-Leaflet.debug.js"></script>
+	<script src="easy-button.js"></script>
+	<!-- 库文件的添加 -->
+</head>
+<body>
+	<div id="map"></div>
+	<script>
+		var map = L.map('map', { zoomControl:false }, {maxZoom:19,minZoom:13}).setView([39.894, 116.3155], 15);
+		//创建地图容器以及定义初始点
+	</script>
+	
+	<script src="water.js"></script>	
+	<script src="ways.js"></script>
+	<script src="landcover.js"></script>	
+	<script src="railway.js"></script>	
+	<!-- 样式表的添加 -->
+	<script>
+		var shopIcon =new L.Icon(
+		{
+			iconUrl: 'images/shop.png',
+			iconSize:     [16, 16], 
+			iconAnchor:   [8, 8]
+		});
+		var waitingIcon =new L.Icon(
+		{
+			iconUrl: 'images/waiting.png',
+			iconSize:     [16, 16], 
+			iconAnchor:   [8, 8]
+		});
+		//添加室内图标类型
+		function styleSheet() {
+			this.color			=undefined;
+			this.fillColor		=undefined;
+			this.weight			=undefined;
+			this.dashArray		=undefined;
+			this.lineCap		='round';
+			this.lineJoin		='round';
+			this.line_clip		=false;
+			this.opacity		=1;
+			this.fillOpacity	=0;
+		}
+		//样式表原型
+		function mystyle(feature){
+			if(map.getZoom()>18){
+				if(feature.properties.room==='building')
+				{
+					return {color: "#ff0000",weight: 1,fill:true,fillColor:'#cccccc',fillOpacity:1};
+				}
+				if(feature.properties.room==='waiting')
+				{
+					return {color: "#ff0000",weight: 1,fill:true,fillColor:'#ff88ff',fillOpacity:1};
+				}
+				if(feature.properties.room==='shop')
+				{
+					return {color: "#ff0000",weight: 1,fill:true,fillColor:'#88ffff',fillOpacity:1};
+				}
+				if(feature.properties.room)
+				{
+					return {color: "#ff0000",weight: 1,fill:true,fillColor:'#ffff88',fillOpacity:1};
+				}
+			}
+			//室内样式的定义
+			else{
+				var zoom = map.getZoom();
+				var style=new styleSheet();
+				var style=waterCss(feature.properties,zoom,style);
+				var style=waysCss(feature.properties,zoom,style);
+				var style=landcoverCss(feature.properties,zoom,style);
+				var style=railwayCss(feature.properties,zoom,style);
+				if(style.fillColor!==undefined)
+				{
+					style.fillOpacity=1;
+				}
+				return style;
+			}
+			//将样式表原型与缩放等级传入赋值函数
+		};
+		var iconArray=[];
+		var iconcount=0;
+		var labelArray=[];
+		var labelcount=0;
+		//标记图标和文字标签对象以便处理
+		function myoneach(feature,layer){
+			if(map.getZoom()<feature.properties.minzoom)
+			{
+				return;
+			}
+			if(map.getZoom()>18){
+				if(feature.properties.room==='waiting'){
+					iconArray[iconcount] = L.marker(layer.getBounds().getCenter(),{icon:waitingIcon});
+					map.addLayer(iconArray[iconcount]);
+					iconcount++;
+				}
+				if(feature.properties.room==='shop'){
+					iconArray[iconcount] = L.marker(layer.getBounds().getCenter(),{icon:shopIcon});
+					map.addLayer(iconArray[iconcount]);
+					iconcount++;
+				}
+				var label = new L.Label();
+				labelArray[labelcount]=label;
+				labelcount++;
+				label.setContent(feature.properties.name);
+				label.setLatLng(layer.getBounds().getCenter());
+				map.showLabel(label);	
+			}
+			//为室内对象绑定图标
+			else if(map.getZoom()>=15){
+				if(feature.geometry.type==='LineString'&&!feature.properties.room&&!feature.properties.building&&!feature.properties.level&&feature.properties.name)
+				{
+					
+					var label = new L.Label();
+					for(x in labelArray)
+					{
+						if(feature.properties.name ===labelArray[x]._content)
+						{
+							return;
+						}
+					}
+					labelArray[labelcount]=label;
+					labelcount++;
+					label.setContent(feature.properties.name);
+					label.setLatLng(layer.getBounds().getCenter());
+					map.showLabel(label);
+				}
+			}
+			//在缩放15级以上添加文字标签
+		};
+		function myLowfilter(feature,layer){
+			if(map.getZoom()<feature.properties.minzoom)
+			{
+				return false;
+			}
+			if(map.getZoom()>18){
+				if(feature.properties.room==='building')
+				{
+					return true;
+				}
+				else
+				{
+					return false;
+				}
+			}
+			else{
+				if(feature.geometry.type==='Point'||feature.properties.level||feature.properties.building||feature.properties.natural==='water'||feature.properties.railway){
+					return false;
+				}
+				else{
+					if(feature.geometry.type==='Polygon'||feature.geometry.type==='MultiPolygon')
+					return true;
+				}
+			}
+		};
+		function myHighfilter(feature,layer){
+			if(map.getZoom()<feature.properties.minzoom)
+			{
+				return false;
+			}
+			if(map.getZoom()>18){
+				if(feature.properties.level&&feature.properties.room&&feature.properties.room!=='building'&&feature.geometry.type!=='Point'){
+					return true;
+				}
+				else{
+					return false;
+				}
+			}
+			else{
+				if(feature.geometry.type==='Point'||feature.properties.level||feature.properties.building){
+					return false;
+				}
+				else{
+					if(feature.geometry.type!=='Polygon'||feature.properties.natural==='water'||feature.properties.railway)
+					return true;
+				}
+			}
+		};
+		//过滤掉建筑和点数据,进行基本的数据分层
+		var GeoJSONURL = 'http://166.111.68.197:11193/geoserver/v/{z}/{x}/{y}';
+		
+		/*var GeoJSONLowLayer = new L.TileLayer.GeoJSON(GeoJSONURL,{maxZoom:19,minZoom:13},
+		{
+			style:mystyle,
+			onEachFeature:myoneach,
+			filter:myLowfilter,
+		})
+		map.addLayer(GeoJSONLowLayer);*/
+		var GeoJSONHighLayer = new L.TileLayer.GeoJSON(GeoJSONURL,{maxZoom:19,minZoom:13},
+		{
+			style:mystyle,
+			onEachFeature:myoneach,
+			filter:myHighfilter
+		})
+		map.addLayer(GeoJSONHighLayer);
+		//创建矢量数据层并将其装入地图容器
+		GeoJSONHighLayer.setZIndex(4);
+		//GeoJSONLowLayer.setZIndex(3);
+		//设定所在div层的显示层级
+		
+		/*GeoJSONLowLayer.on('load',function() {
+			//obdata.update();
+		});*/
+		GeoJSONHighLayer.on('load',function() {
+			obdata.update();
+		});
+
+
+
+        L.easyButton('<span class="description">Z+</span>', function(btn, map){
+        map.zoomIn();
+        }).addTo(map); 
+
+        L.easyButton('<span class="description">Z-</span>', function(btn, map){
+        map.zoomOut();
+        }).addTo(map);
+
+        L.easyButton('<span class="description">R</span>', function(btn, map){
+        map.panBy([200,0]);
+        }).addTo(map);
+
+        L.easyButton('<span class="description">L</span>', function(btn, map){
+        map.panBy([-200,0]);
+        }).addTo(map);
+
+        L.easyButton('<span class="description">D</span>', function(btn, map){
+        map.panBy([0,200]);
+        }).addTo(map);
+
+        L.easyButton('<span class="description">U</span>', function(btn, map){
+        map.panBy([0,-200]);
+        }).addTo(map);
+
+
+		//定义瓦片层加载完成后再加载建筑
+		//leaflet-src.js在2460,2489,2566行处有修改
+		//obdata定义于OSMBuildings-Leaflet.debug.js  2386行		
+		//var osmb = new OSMBuildings(map).load(GeoJSONURL,'');
+		//加载建筑数据层,OSMBuildings-Leaflet.debug.js 在532,585,1025,2139行处有修改
+	</script>
+</body>
+</html>
